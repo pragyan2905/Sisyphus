@@ -1,9 +1,10 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # The connection string to our Docker container. 
 # Format: postgresql://user:password@host:port/database_name
-SQLALCHEMY_DATABASE_URL = "postgresql+psycopg2://admin:password@localhost:5433/sisyphus_db"
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://admin:password@localhost:5433/sisyphus_db")
 
 # The Engine is the core that actually handles the TCP connection pool to PostgreSQL.
 engine = create_engine(SQLALCHEMY_DATABASE_URL)

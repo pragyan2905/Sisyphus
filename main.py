@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 models.Base.metadata.create_all(bind=engine)
 
 # Redis client for Rate Limiting
-redis_client = redis.from_url("redis://localhost:6380")
+redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6380"))
 
 def check_rate_limit(request: Request):
     # Phase 11: Rate Limiting (Fixed Window)
