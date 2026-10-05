@@ -116,7 +116,7 @@ function App() {
               Log out
             </button>
           ) : (
-            <a href="http://localhost:8080/auth/login" className="login-btn">Log in with Google</a>
+            <a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/auth/login`} className="login-btn">Log in with Google</a>
           )}
           <button className="signup-btn">Get started free</button>
         </div>
