@@ -6,6 +6,13 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 # Format: postgresql://user:password@host:port/database_name
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://admin:password@localhost:5433/sisyphus_db")
 
+# Neon/Render give URLs like "postgresql://..." or "postgres://..."
+# SQLAlchemy needs "postgresql+psycopg2://..." to use the correct driver.
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif SQLALCHEMY_DATABASE_URL.startswith("postgresql://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 # The Engine is the core that actually handles the TCP connection pool to PostgreSQL.
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
