@@ -76,36 +76,17 @@ flowchart TD
 | Testing | Pytest, HTTPX |
 | Deployment | Render (render.yaml Blueprint) |
 
-## API Reference
+## API Documentation
 
-Full interactive documentation is auto-generated at `/docs` (Swagger UI) and `/redoc`.
+The REST API is fully documented via an interactive, auto-generated Swagger UI interface. Once deployed (or running locally), navigate to `/docs` to view the OpenAPI specifications, authenticate via the UI, and execute test requests directly against the live endpoints.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/health` | None | Database connectivity check |
-| GET | `/auth/login` | None | Redirect to Google OAuth |
-| GET | `/auth/callback` | None | OAuth callback, issues JWT |
-| GET | `/services` | Bearer JWT | List all services for current user |
-| POST | `/services` | Bearer JWT | Register a new monitoring target |
-| GET | `/services/{id}` | Bearer JWT | Get a single service |
-| GET | `/services/{id}/history` | Bearer JWT | Get last 50 ping results |
+## Core Implementations
 
-## System Design Notes
-
-**Decoupled Execution (Producer-Consumer Pattern)**
-The API server never performs network I/O against target services. The `scheduler.py` daemon acts as the Producer, pushing jobs to a Redis list (`ping_jobs`). The `worker.py` processes act as horizontally scalable Consumers using `BRPOP` to pop and execute jobs. This means pings are non-blocking and the web server remains fully responsive under load.
-
-**Database Pagination**
-The Scheduler queries active services with `.limit(500).offset(n)` in a while loop to avoid loading the entire table into memory, preventing OOM failures at scale.
-
-**Multi-Tenancy**
-All service records are scoped to an `owner_id` foreign key. API routes enforce this via a `get_current_user` FastAPI dependency that validates the JWT and returns the authenticated user. No cross-user data leakage is possible.
-
-**Fixed Window Rate Limiting**
-Inbound requests to `POST /services` are rate-limited per client IP using Redis atomic `INCR` + `EXPIRE` operations. This provides O(1) rate limiting without any database lookups.
-
-**Structured Logging**
-`logger.py` implements a custom `JSONFormatter` over Python's `logging` module. All worker and scheduler output is machine-readable JSON, ready for ingestion by Datadog, Splunk, or CloudWatch.
+*   **Producer-Consumer Queue**: `scheduler.py` queries targets and pushes to a Redis `ping_jobs` list. Independent `worker.py` instances use `BRPOP` to execute the HTTP requests asynchronously.
+*   **Database Pagination**: The scheduler pulls active monitors from PostgreSQL using `.limit(500).offset(n)` batches to enforce strict memory bounds at scale.
+*   **Multi-Tenancy**: Data separation is enforced at the API layer via a `get_current_user` FastAPI dependency. All records are hard-scoped to the authenticated `owner_id`.
+*   **Rate Limiting**: `POST /services` utilizes a fixed-window algorithm in Redis (`INCR` + `EXPIRE`) to throttle requests by client IP with O(1) time complexity.
+*   **Structured Telemetry**: A custom `JSONFormatter` intercepts standard Python logging to output machine-readable JSON logs for compatibility with external observability pipelines.
 
 ## Local Development
 
