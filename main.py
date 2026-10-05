@@ -14,6 +14,23 @@ import security
 import models
 from database import engine, get_db
 import redis
+import threading
+from contextlib import asynccontextmanager
+from scheduler import start_scheduler
+from worker import start_worker
+
+# --- Lifecycle Manager for Free Tier Hack ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Launch the scheduler and worker as background threads
+    # so they run inside the free Web Service!
+    scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
+    worker_thread = threading.Thread(target=start_worker, daemon=True)
+    
+    scheduler_thread.start()
+    worker_thread.start()
+    yield
+
 
 # Auto-create new tables (like PingResult)
 models.Base.metadata.create_all(bind=engine)
@@ -39,7 +56,8 @@ def check_rate_limit(request: Request):
 app = FastAPI(
     title="Sisyphus API",
     description="Enterprise-grade background monitoring and ping service API.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
