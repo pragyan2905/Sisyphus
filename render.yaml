@@ -69,10 +69,7 @@ services:
     staticPublishPath: "./client/dist"
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: sisyphus-api
-          property: url
+        sync: false
 
 # 6. PostgreSQL (Data Storage)
 databases:
