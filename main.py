@@ -36,11 +36,19 @@ async def lifespan(app: FastAPI):
 models.Base.metadata.create_all(bind=engine)
 
 # Redis client for Rate Limiting
-redis_client = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6380"))
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6380")
+try:
+    redis_client = redis.from_url(REDIS_URL)
+    redis_client.ping()  # Test the connection
+except Exception:
+    redis_client = None
 
 def check_rate_limit(request: Request):
     # Phase 11: Rate Limiting (Fixed Window)
     # Allow max 20 requests per minute per IP address
+    if redis_client is None:
+        return  # Skip rate limiting if Redis is unavailable
+    
     client_ip = request.client.host
     key = f"rate_limit:{client_ip}"
     
@@ -158,7 +166,8 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
     jwt_token = security.create_access_token(user.id)
     
     # 3. Redirect back to frontend with the token
-    return RedirectResponse(url=f"http://localhost:5173?token={jwt_token}")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    return RedirectResponse(url=f"{frontend_url}?token={jwt_token}")
 
 @app.get("/health")
 def health_check():
