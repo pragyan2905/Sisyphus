@@ -4,8 +4,10 @@ import redis
 from database import SessionLocal
 import models
 
+import os
+
 # Connect to the Redis container
-REDIS_URL = "redis://localhost:6380"
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6380")
 
 def start_scheduler():
     # 1. Connect to Redis (Our Message Broker)

@@ -1,0 +1,68 @@
+services:
+  # 1. The FastAPI Web Server
+  - type: web
+    name: keep-alive-api
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: keep-alive-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: keep-alive-redis
+          property: connectionString
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+
+  # 2. The Background Worker (Pings the URLs)
+  - type: worker
+    name: keep-alive-worker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python worker.py"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: keep-alive-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: keep-alive-redis
+          property: connectionString
+
+  # 3. The Scheduler (Pushes jobs to Redis)
+  - type: worker
+    name: keep-alive-scheduler
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python scheduler.py"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: keep-alive-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: keep-alive-redis
+          property: connectionString
+
+  # 4. Redis (Queue & Rate Limiting)
+  - type: redis
+    name: keep-alive-redis
+    ipAllowList: [] # internal only
+
+# 5. PostgreSQL (Data Storage)
+databases:
+  - name: keep-alive-db
+    databaseName: keepalivedb
+    user: keepaliveuser
