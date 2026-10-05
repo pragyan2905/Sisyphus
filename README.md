@@ -1,17 +1,13 @@
 # Sisyphus
 
-**Sisyphus** is an enterprise-grade, highly scalable uptime monitoring service. Like the Greek myth of Sisyphus forever pushing his boulder, this system tirelessly runs in the background, endlessly pinging target servers to ensure they remain alive, logging their response times, and providing instant observability.
+A scalable, asynchronous uptime monitoring system built on a decoupled queue architecture.
 
-## System Architecture
-
-To prevent memory bloat, out-of-memory (OOM) crashes, and event-loop freezing, the architecture is entirely decoupled. It relies on a Message Broker (Redis) to separate the web server from the background execution workers.
-
-### Architecture Diagram
+## Architecture
 
 ```mermaid
 flowchart TD
-    User((User Browser)) -->|Interacts| UI[React Dashboard]
-    UI -->|HTTP REST| API[FastAPI Server]
+    User([User Browser]) -->|"HTTP"| UI[React Dashboard]
+    UI -->|"REST API"| API[FastAPI Server]
 
     subgraph API Layer
         API --> Auth[Google OAuth & JWT]
@@ -23,8 +19,8 @@ flowchart TD
         Queue[(Redis)]
     end
 
-    API <-->|R/W Users & Services| DB
-    RL <-->|Check/Incr Limits| Queue
+    API <-->|"R/W Configs"| DB
+    RL <-->|"Enforce Quotas"| Queue
 
     subgraph Execution Layer
         Sched[Scheduler Daemon]
@@ -32,65 +28,83 @@ flowchart TD
         Worker2[Async Worker N]
     end
 
-    Sched -->|1. Fetch active monitors in batches| DB
-    Sched -->|2. Push 'ping_jobs'| Queue
+    Sched -->|"Fetch Active Targets"| DB
+    Sched -->|"Push ping_jobs"| Queue
 
-    Queue -->|3. Consume (BRPOP)| Worker1
-    Queue -->|3. Consume (BRPOP)| Worker2
+    Queue -->|"Consume BRPOP"| Worker1
+    Queue -->|"Consume BRPOP"| Worker2
 
-    Worker1 -->|4. Async HTTP GET| Target1{{Target Service A}}
-    Worker2 -->|4. Async HTTP GET| Target2{{Target Service B}}
+    Worker1 -->|"Async HTTP GET"| Target1{{Target Service A}}
+    Worker2 -->|"Async HTTP GET"| Target2{{Target Service B}}
 
-    Worker1 -->|5. Save Latency & Status| DB
-    Worker2 -->|5. Save Latency & Status| DB
+    Worker1 -->|"Save Status & Latency"| DB
+    Worker2 -->|"Save Status & Latency"| DB
 ```
 
 ## Tech Stack
-*   **Backend API**: Python, FastAPI, SQLAlchemy
-*   **Frontend**: React.js, Vite, Vanilla CSS
-*   **Database**: PostgreSQL (Relational persistence)
-*   **Message Broker & Cache**: Redis (Task Queueing & Rate Limiting)
-*   **Authentication**: Google OAuth 2.0 & JWT (JSON Web Tokens)
-*   **Testing**: Pytest & HTTPX
+*   **Backend:** Python, FastAPI, SQLAlchemy
+*   **Frontend:** React.js, Vite
+*   **Infrastructure:** PostgreSQL, Redis
+*   **Authentication:** Google OAuth 2.0 (JWT)
+*   **Testing:** Pytest, HTTPX
 
-## Core Features & Engineering Decisions
+## System Components
+1. **API Server (`main.py`)**: Exposes REST endpoints, enforces fixed-window rate limiting via Redis, and handles JWT generation and validation.
+2. **Scheduler (`scheduler.py`)**: A daemon that queries PostgreSQL for active monitoring targets using paginated batching (`.limit(500)`) and pushes them to the Redis message queue.
+3. **Async Workers (`worker.py`)**: Horizontally scalable daemon processes that execute blocking `BRPOP` commands on Redis to consume tasks, performing network I/O asynchronously via `httpx`.
 
-### 1. Decoupled Execution (The Worker Pattern)
-If an API server attempts to ping thousands of URLs synchronously, it will freeze the entire application. Sisyphus solves this by running a standalone `scheduler.py` daemon that queries the database using `.limit(500)` paginated chunks, and pushes those jobs to a Redis `ping_jobs` list. Independent `worker.py` instances use `brpop` to consume those jobs and perform the pings asynchronously using `httpx`.
+## Setup & Local Development
 
-### 2. Multi-Tenancy & JWT Auth
-The API is fully locked down using a Dependency Injection (`get_current_user`). When a user logs in via Google, the backend generates a secure JWT. All API routes (like adding a service or viewing history) require this token in the `Authorization: Bearer` header, enforcing strict row-level separation so users can only see and ping their own services.
+### 1. Environment Configuration
+Create a `.env` file in the root directory:
+```env
+DATABASE_URL=postgresql+psycopg2://admin:password@localhost:5433/sisyphus_db
+REDIS_URL=redis://localhost:6380
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+SECRET_KEY=your_secure_secret
+```
 
-### 3. Redis Rate Limiting (Fixed Window)
-To protect the backend from abuse, the `POST /services` endpoint is protected by a custom Redis Rate Limiter. It tracks requests by Client IP and enforces a strict limit (e.g., 20 requests per minute).
-
-### 4. Structured Logging
-Instead of raw print statements, the backend uses a custom `JSONFormatter`. All output is structured JSON, making it production-ready for ingestion by observability platforms like Datadog, Splunk, or AWS CloudWatch.
-
-## Deployment
-This project is configured for 1-click deployment on **Render.com**. 
-The `render.yaml` file defines a full stack:
-1. `sisyphus-api` (Web Service)
-2. `sisyphus-worker` (Background Worker)
-3. `sisyphus-scheduler` (Background Worker)
-4. `sisyphus-redis` (Internal Redis)
-5. `sisyphus-db` (Internal PostgreSQL)
-6. `sisyphus-frontend` (Static React Site)
-
-### Local Development
+### 2. Infrastructure (Docker)
+Start the PostgreSQL and Redis containers:
 ```bash
-# 1. Start Postgres and Redis
 docker-compose up -d
+```
 
-# 2. Start the Backend API
+### 3. Backend Services
+Initialize the Python environment and run the core services:
+```bash
+python3 -m venv venv
 source venv/bin/activate
+pip install -r requirements.txt
+
+# 1. Start the FastAPI web server
 uvicorn main:app --reload --port 8080
 
-# 3. Start the Background Workers
+# 2. Start the cron scheduler (run in a separate terminal)
 python scheduler.py
-python worker.py
 
-# 4. Start the Frontend
+# 3. Start the execution worker (run in a separate terminal)
+python worker.py
+```
+
+### 4. Frontend Client
+```bash
 cd client
+npm install
 npm run dev
 ```
+
+## Automated Testing
+Execute the `pytest` suite to validate API routing, database constraints, and rate limiter configurations.
+```bash
+source venv/bin/activate
+pytest test_api.py -v
+```
+
+## Deployment
+Deployment configuration is provided via `render.yaml`. It automates the provisioning of:
+*   PostgreSQL and Redis instances (Internal Network)
+*   FastAPI Web Service
+*   Scheduler & Worker Background Services
+*   React Frontend (Static CDN Build)
