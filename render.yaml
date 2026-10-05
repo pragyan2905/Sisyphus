@@ -1,19 +1,19 @@
 services:
   # 1. The FastAPI Web Server
   - type: web
-    name: keep-alive-api
+    name: sisyphus-api
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: keep-alive-db
+          name: sisyphus-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: keep-alive-redis
+          name: sisyphus-redis
           property: connectionString
       - key: GOOGLE_CLIENT_ID
         sync: false
@@ -24,45 +24,58 @@ services:
 
   # 2. The Background Worker (Pings the URLs)
   - type: worker
-    name: keep-alive-worker
+    name: sisyphus-worker
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python worker.py"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: keep-alive-db
+          name: sisyphus-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: keep-alive-redis
+          name: sisyphus-redis
           property: connectionString
 
   # 3. The Scheduler (Pushes jobs to Redis)
   - type: worker
-    name: keep-alive-scheduler
+    name: sisyphus-scheduler
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python scheduler.py"
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: keep-alive-db
+          name: sisyphus-db
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: redis
-          name: keep-alive-redis
+          name: sisyphus-redis
           property: connectionString
 
   # 4. Redis (Queue & Rate Limiting)
   - type: redis
-    name: keep-alive-redis
+    name: sisyphus-redis
     ipAllowList: [] # internal only
 
-# 5. PostgreSQL (Data Storage)
+  # 5. React Frontend
+  - type: web
+    name: sisyphus-frontend
+    env: static
+    buildCommand: "cd client && npm install && npm run build"
+    staticPublishPath: "./client/dist"
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: sisyphus-api
+          property: url
+
+# 6. PostgreSQL (Data Storage)
 databases:
-  - name: keep-alive-db
-    databaseName: keepalivedb
-    user: keepaliveuser
+  - name: sisyphus-db
+    databaseName: sisyphusdb
+    user: sisyphususer

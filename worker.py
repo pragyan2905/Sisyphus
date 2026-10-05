@@ -7,6 +7,9 @@ import redis.exceptions
 from database import SessionLocal
 import models
 import os
+from logger import get_logger
+
+logger = get_logger("worker")
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6380")
 
@@ -14,7 +17,7 @@ async def process_ping_job(job_data):
     url = job_data.get("url")
     service_id = job_data.get("service_id")
     
-    print(f"[{service_id}] Ping started: {url}")
+    logger.info(f"[{service_id}] Ping started: {url}")
     
     # 1. Start the stopwatch
     start_time = time.time()
@@ -48,15 +51,15 @@ async def process_ping_job(job_data):
         )
         db.add(ping_result)
         db.commit()
-        print(f"[{service_id}] Logged to DB: {status_code}, {latency_ms:.0f}ms")
+        logger.info(f"[{service_id}] Logged to DB: {status_code}, {latency_ms:.0f}ms")
     except Exception as db_err:
-        print(f"[{service_id}] DB Error: {db_err}")
+        logger.error(f"[{service_id}] DB Error: {db_err}")
     finally:
         db.close()
 
 async def start_worker():
     r = redis.from_url(REDIS_URL)
-    print("Worker is listening to Redis queue 'ping_jobs'...")
+    logger.info("Worker is listening to Redis queue 'ping_jobs'...")
     
     while True:
         try:
@@ -71,7 +74,7 @@ async def start_worker():
         except Exception as e:
             import traceback
             traceback.print_exc()
-            print(f"Worker Error: {e}")
+            logger.error(f"Worker Error: {e}")
             await asyncio.sleep(1)
 
 if __name__ == "__main__":

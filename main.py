@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, status
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import RedirectResponse
@@ -35,7 +36,11 @@ def check_rate_limit(request: Request):
     pipe.expire(key, 60) # Reset the counter every 60 seconds
     pipe.execute()
 
-app = FastAPI()
+app = FastAPI(
+    title="Sisyphus API",
+    description="Enterprise-grade background monitoring and ping service API.",
+    version="1.0.0"
+)
 
 app.add_middleware(
     SessionMiddleware, 
@@ -44,7 +49,7 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "https://sisyphus-robot.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -89,6 +94,20 @@ class PingResultResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# --- Authentication Dependency ---
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    user_id = security.verify_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
 # --- API Endpoints ---
 @app.get("/auth/login")
 async def login(request: Request):
@@ -118,7 +137,7 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         db.refresh(user)
         
     # 2. Security: Generate JWT token for this user session
-    jwt_token = security.create_access_token({"sub": str(user.id)})
+    jwt_token = security.create_access_token(user.id)
     
     # 3. Redirect back to frontend with the token
     return RedirectResponse(url=f"http://localhost:5173?token={jwt_token}")
@@ -128,32 +147,32 @@ def health_check():
     return {"status": "ok", "database": "connected"}
 
 @app.get("/services", response_model=list[ServiceResponse])
-def get_all_services(db: Session = Depends(get_db)):
-    return db.query(models.Service).all()
+def get_all_services(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    return db.query(models.Service).filter(models.Service.owner_id == current_user.id).all()
 
 @app.get("/services/{service_id}", response_model=ServiceResponse)
-def get_service(service_id: int, db: Session = Depends(get_db)):
-    service = db.query(models.Service).filter(models.Service.id == service_id).first()
+def get_service(service_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    service = db.query(models.Service).filter(models.Service.id == service_id, models.Service.owner_id == current_user.id).first()
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
     return service
 
 @app.post("/services", response_model=ServiceResponse, dependencies=[Depends(check_rate_limit)])
-def create_service(service: ServiceCreate, db: Session = Depends(get_db)):
+def create_service(service: ServiceCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # Phase 9: Service Limits & Plans
-    # In a real app, this would count services for the specific logged-in user.
-    # For our sandbox, we will enforce a global Free Tier limit of 3 services.
-    service_count = db.query(models.Service).count()
-    if service_count >= 3:
+    # Enforce a Free Tier limit of 5 services per user.
+    service_count = db.query(models.Service).filter(models.Service.owner_id == current_user.id).count()
+    if service_count >= 5:
         raise HTTPException(
             status_code=403, 
-            detail="Free Tier limit reached (Max 3 services). Please subscribe to Pro."
+            detail="Free Tier limit reached (Max 5 services). Please subscribe to Pro."
         )
 
     db_service = models.Service(
         name=service.name,
         url=service.url,
-        interval_minutes=service.interval_minutes
+        interval_minutes=service.interval_minutes,
+        owner_id=current_user.id
     )
     db.add(db_service)
     db.commit()
@@ -161,7 +180,12 @@ def create_service(service: ServiceCreate, db: Session = Depends(get_db)):
     return db_service
 
 @app.get("/services/{service_id}/history", response_model=list[PingResultResponse])
-def get_service_history(service_id: int, db: Session = Depends(get_db)):
+def get_service_history(service_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Validate owner
+    service = db.query(models.Service).filter(models.Service.id == service_id, models.Service.owner_id == current_user.id).first()
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+        
     # Fetch the 50 most recent pings for this service
     results = db.query(models.PingResult)\
         .filter(models.PingResult.service_id == service_id)\

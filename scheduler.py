@@ -1,10 +1,11 @@
 import time
 import json
 import redis
-from database import SessionLocal
 import models
-
 import os
+from logger import get_logger
+
+logger = get_logger("scheduler")
 
 # Connect to the Redis container
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6380")
@@ -16,25 +17,28 @@ def start_scheduler():
     # 2. Connect to PostgreSQL
     db = SessionLocal()
     
-    print("Scheduler started. Checking for jobs every 60 seconds...")
+    logger.info("Scheduler started. Checking for jobs every 60 seconds...")
     
     while True:
-        # Fetch all active services from the database
-        services = db.query(models.Service).filter(models.Service.is_active == True).all()
-        
-        for service in services:
-            # We package the job payload as a Dictionary
-            job = {
-                "service_id": service.id,
-                "url": service.url
-            }
+        # Fetch active services in batches to avoid OOM crash on massive tables
+        offset = 0
+        batch_size = 500
+        while True:
+            services = db.query(models.Service).filter(models.Service.is_active == True).limit(batch_size).offset(offset).all()
+            if not services:
+                break
             
-            # LPUSH: "Left Push". We push the job into a Redis List named "ping_jobs"
-            # We must convert the dictionary to a JSON string because Redis only stores text/bytes.
-            r.lpush("ping_jobs", json.dumps(job))
-            print(f"Scheduler: Queued job for {service.url}")
+            for service in services:
+                job = {
+                    "service_id": service.id,
+                    "url": service.url
+                }
+                r.lpush("ping_jobs", json.dumps(job))
+                logger.info(f"Scheduler: Queued job for {service.url}")
+                
+            offset += batch_size
             
-        print("Scheduler: Sleeping for 60 seconds...\n")
+        logger.info("Scheduler: Sleeping for 60 seconds...")
         time.sleep(60)
 
 if __name__ == "__main__":
