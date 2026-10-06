@@ -4,6 +4,7 @@ import redis
 import models
 import os
 from logger import get_logger
+from database import SessionLocal
 
 logger = get_logger("scheduler")
 
