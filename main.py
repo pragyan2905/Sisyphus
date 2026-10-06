@@ -73,9 +73,11 @@ app.add_middleware(
     secret_key=os.getenv("SECRET_KEY", "super-secret-local-dev-key")
 )
 
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "https://sisyphus-robot.onrender.com"],
+    allow_origins=[frontend_url, "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
