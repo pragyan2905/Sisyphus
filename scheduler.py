@@ -5,6 +5,7 @@ import models
 import os
 from logger import get_logger
 from database import SessionLocal
+from datetime import datetime, timezone
 
 logger = get_logger("scheduler")
 
@@ -30,6 +31,16 @@ def start_scheduler():
                 break
             
             for service in services:
+                latest_ping = db.query(models.PingResult)\
+                    .filter(models.PingResult.service_id == service.id)\
+                    .order_by(models.PingResult.timestamp.desc())\
+                    .first()
+                
+                if latest_ping:
+                    time_since_ping = (datetime.now(timezone.utc) - latest_ping.timestamp).total_seconds()
+                    if time_since_ping < (service.interval_minutes * 60):
+                        continue
+                
                 job = {
                     "service_id": service.id,
                     "url": service.url

@@ -19,13 +19,18 @@ from contextlib import asynccontextmanager
 from scheduler import start_scheduler
 from worker import start_worker
 
+import asyncio
+
+def run_worker_sync():
+    asyncio.run(start_worker())
+
 # --- Lifecycle Manager for Free Tier Hack ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Launch the scheduler and worker as background threads
     # so they run inside the free Web Service!
     scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
-    worker_thread = threading.Thread(target=start_worker, daemon=True)
+    worker_thread = threading.Thread(target=run_worker_sync, daemon=True)
     
     scheduler_thread.start()
     worker_thread.start()

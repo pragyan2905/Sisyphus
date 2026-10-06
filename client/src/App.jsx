@@ -87,6 +87,13 @@ function App() {
 
   useEffect(() => {
     fetchServices();
+    
+    // Auto-refresh every 10 seconds
+    const intervalId = setInterval(() => {
+      fetchServices();
+    }, 10000);
+    
+    return () => clearInterval(intervalId);
   }, [token]);
 
   const handleSubmit = async (e) => {
@@ -220,7 +227,6 @@ function App() {
                   {selectedService.is_active ? 'Pause' : 'Resume'}
                 </button>
                 <button onClick={() => handleDelete(selectedService.id)} className="pill-btn" style={{background: 'var(--danger)'}}>Delete</button>
-                <button onClick={() => fetchServiceHistory(selectedService.id)} className="icon-btn" title="Refresh">↻</button>
               </div>
             </div>
             
@@ -329,7 +335,6 @@ function App() {
             <div className="dashboard-frame">
               <div className="section-header">
                 <h2>Monitoring Dashboard</h2>
-                <button onClick={fetchServices} className="icon-btn" title="Refresh">↻</button>
               </div>
               
               <div className="services-grid">
