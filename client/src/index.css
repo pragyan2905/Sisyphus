@@ -378,4 +378,25 @@ body {
     .nav-links {
         display: none;
     }
+    .top-nav {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+    .auth-buttons {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .services-grid {
+        grid-template-columns: 1fr;
+    }
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    /* Detailed view layout stacking */
+    div[style*="display: grid; grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
 }
