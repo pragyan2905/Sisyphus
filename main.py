@@ -221,3 +221,39 @@ def get_service_history(service_id: int, db: Session = Depends(get_db), current_
         .order_by(models.PingResult.timestamp.desc())\
         .limit(50).all()
     return results
+
+@app.put("/services/{service_id}/toggle-pause")
+def toggle_service_pause(
+    service_id: int, 
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = db.query(models.Service).filter(
+        models.Service.id == service_id, 
+        models.Service.owner_id == current_user.id
+    ).first()
+    
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+        
+    service.is_active = not service.is_active
+    db.commit()
+    return {"message": "Service toggled", "is_active": service.is_active}
+
+@app.delete("/services/{service_id}")
+def delete_service(
+    service_id: int, 
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    service = db.query(models.Service).filter(
+        models.Service.id == service_id, 
+        models.Service.owner_id == current_user.id
+    ).first()
+    
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+        
+    db.delete(service)
+    db.commit()
+    return {"message": "Service successfully deleted"}
