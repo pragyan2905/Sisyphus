@@ -1,5 +1,8 @@
 # Sisyphus
 
+**Live Dashboard:** [https://sisyphus-1-4ss6.onrender.com](https://sisyphus-1-4ss6.onrender.com)  
+**API Documentation (Swagger):** [https://sisyphus-7xlq.onrender.com/docs](https://sisyphus-7xlq.onrender.com/docs)
+
 Sisyphus is an asynchronous uptime monitoring service. It periodically pings registered HTTP endpoints, records response time and status codes, and exposes that telemetry via a REST API and React dashboard. The system is built on a decoupled Producer-Consumer architecture backed by Redis, ensuring the API server never blocks on I/O-heavy ping operations.
 
 ## Architecture
